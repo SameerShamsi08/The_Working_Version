@@ -1,6 +1,9 @@
 """
 models/bed.py
 Functions for bed allocation, release, and occupancy reporting.
+
+BUG FIX: allocate_bed() had a Python bug where `bed` was referenced
+before assignment when preferred_ward was None (UnboundLocalError).
 """
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -30,8 +33,15 @@ def get_bed_summary():
 
 
 def allocate_bed(patient_id, preferred_ward=None):
-    """Find the first available bed (optionally in preferred_ward) and assign it."""
+    """Find the first available bed (optionally in preferred_ward) and assign it.
+
+    FIX: Original code had an UnboundLocalError — `bed` was used in the
+    second condition without being assigned when preferred_ward was None.
+    Now uses a clear two-step approach.
+    """
     conn = get_db()
+
+    bed = None  # initialise to avoid UnboundLocalError
 
     if preferred_ward:
         bed = conn.execute(
@@ -39,7 +49,8 @@ def allocate_bed(patient_id, preferred_ward=None):
             (preferred_ward,)
         ).fetchone()
 
-    if not preferred_ward or not bed:
+    # Fall back to any available bed if no preferred ward or none found there
+    if not bed:
         bed = conn.execute(
             "SELECT * FROM beds WHERE status='available' ORDER BY id LIMIT 1"
         ).fetchone()

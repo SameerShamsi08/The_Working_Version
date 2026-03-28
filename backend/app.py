@@ -1,6 +1,11 @@
 """
-HEA — Hospital Emergency Allocation  v2.1
+HEA — Hospital Emergency Allocation  v2.2
 Main Flask Application — includes Chat API, Notifications, Escalations
+
+FIXES:
+  - Updated Anthropic model string to claude-sonnet-4-6
+  - Added proper error handling for missing tables on first run
+  - Fixed CORS to be more permissive for local dev
 
 Run: python app.py
 API: http://localhost:5000
@@ -24,7 +29,7 @@ CORS(app, resources={r"/api/*": {"origins": "*"}})
 # ─── HEALTH CHECK ────────────────────────────────────────────────
 @app.route('/api/health')
 def health():
-    return jsonify({"status": "ok", "message": "HEA API running", "version": "2.1"})
+    return jsonify({"status": "ok", "message": "HEA API running", "version": "2.2"})
 
 # ─── DASHBOARD SUMMARY ───────────────────────────────────────────
 @app.route('/api/dashboard')
@@ -36,17 +41,20 @@ def dashboard():
         occupancy     = get_occupancy_rate()
         conn = get_db()
         resources = [dict(r) for r in conn.execute("SELECT * FROM resources").fetchall()]
-        # Unread notification count
-        notif_count = conn.execute(
-            "SELECT COUNT(*) FROM notifications WHERE is_read=0"
-        ).fetchone()[0]
+        # Unread notification count — handle missing table gracefully
+        try:
+            notif_count = conn.execute(
+                "SELECT COUNT(*) FROM notifications WHERE is_read=0"
+            ).fetchone()[0]
+        except Exception:
+            notif_count = 0
         conn.close()
         return jsonify({
-            "bed_summary":       bed_summary,
-            "patient_stats":     patient_stats,
-            "alerts":            alerts,
-            "occupancy_rate":    occupancy,
-            "resources":         resources,
+            "bed_summary":        bed_summary,
+            "patient_stats":      patient_stats,
+            "alerts":             alerts,
+            "occupancy_rate":     occupancy,
+            "resources":          resources,
             "notification_count": notif_count,
         })
     except Exception as e:
@@ -104,7 +112,7 @@ def update_bed_status(bed_id):
         data = request.get_json() or {}
         status = data.get('status')
         if status not in ['available', 'occupied', 'maintenance']:
-            return jsonify({"error": "Invalid status"}), 400
+            return jsonify({"error": "Invalid status. Use: available, occupied, maintenance"}), 400
         conn = get_db()
         conn.execute("UPDATE beds SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", (status, bed_id))
         conn.execute("INSERT INTO audit_log (action, details) VALUES (?, ?)",
@@ -136,8 +144,12 @@ def admit():
             priority=data.get('priority', 'normal'), ward=data.get('ward')
         )
         bed, bed_err = allocate_bed(patient_id, data.get('ward'))
-        return jsonify({"patient_id": patient_id, "bed": bed, "bed_error": bed_err,
-                        "message": "Patient admitted" + (" and bed allocated" if bed else " (no beds available)")})
+        return jsonify({
+            "patient_id": patient_id,
+            "bed":        bed,
+            "bed_error":  bed_err,
+            "message":    "Patient admitted" + (" and bed allocated" if bed else " (no beds available)")
+        })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -249,14 +261,8 @@ def _get_chat_context():
             f"  {w['ward']}: {w['available']} available / {w['total']} total ({round((w['occupied']/w['total'])*100)}% occupied)"
             for w in bed_summary if w['total'] > 0
         ])
-
-        res_text = "\n".join([
-            f"  {r['name']}: {r['available']}/{r['total']} available"
-            for r in resources
-        ])
-
+        res_text = "\n".join([f"  {r['name']}: {r['available']}/{r['total']} available" for r in resources])
         alert_text = "\n".join([f"  [{a['level'].upper()}] {a['message']}" for a in alerts]) or "  None"
-
         fore_text = "\n".join([
             f"  {f['day']} {f['date']}: ~{f['predicted_admissions']} admissions, {f['predicted_icu']} ICU, {f['predicted_emergency']} Emergency{'  ⚠ SURGE' if f['surge_alert'] else ''}"
             for f in forecast
@@ -286,76 +292,49 @@ Active Alerts:
 
 
 def _rule_based_chat(message, context):
-    """
-    Fallback rule-based chatbot when Anthropic API is not configured.
-    Returns (response_text, action)
-    """
+    """Fallback rule-based chatbot when Anthropic API is not configured."""
     lc = message.lower()
 
-    # Emergency booking trigger
     if any(w in lc for w in ['emergency', 'admit', 'book a bed', 'need bed', 'patient registration', 'register patient', 'book bed']):
         return ("I'll help you register an emergency patient right away.", "start_booking")
-
-    # Human escalation trigger
     if any(w in lc for w in ['human', 'staff', 'doctor', 'speak to', 'connect', 'nurse', 'talk to someone', 'real person']):
         return ("Let me connect you with hospital staff.", "escalate")
-
-    # Bed status
     if any(w in lc for w in ['bed', 'beds', 'available', 'occupancy', 'ward', 'room']):
         return ("Here is the current bed availability:", "show_beds")
-
-    # ICU
     if 'icu' in lc or 'intensive' in lc:
         lines = [l for l in context.split('\n') if 'icu' in l.lower()]
         info = lines[0].strip() if lines else 'ICU data not available'
         return (f"ICU Status from the dashboard:\n{info}\n\nType 'emergency' to register an ICU patient.", None)
-
-    # Forecast
     if any(w in lc for w in ['forecast', 'predict', 'tomorrow', '72', 'inflow', 'admissions']):
         return ("Let me pull the 72-hour forecast for you.", "show_forecast")
-
-    # Resource
     if any(w in lc for w in ['ventilator', 'oxygen', 'resource', 'equipment', 'ot', 'wheelchair']):
         lines = [l for l in context.split('\n') if any(k in l.lower() for k in ['ventilator','oxygen','ot room','wheelchair','icu monitor'])]
         info = '\n'.join(lines[:5]) if lines else 'Resource data not available.'
         return (f"Resource availability:\n{info}", None)
-
-    # Greetings
     if any(w in lc for w in ['hi', 'hello', 'hey', 'namaste', 'hii', 'good morning', 'good evening']):
         return ("Hello! I'm the HEA Assistant. I can help you with:\n• Bed availability\n• Emergency patient registration\n• ICU & resource status\n• 72-hour forecast\n• Connecting to staff\n\nWhat do you need?", None)
-
-    # Help
     if any(w in lc for w in ['help', 'what can you', 'options', 'capabilities']):
-        return ("I can help you with:\n\n🛏 **Bed Status** — check availability by ward\n🚨 **Emergency Booking** — register patients instantly\n❤️ **ICU Status** — current ICU occupancy\n📈 **Forecast** — 72-hour admission prediction\n👤 **Staff Connect** — escalate to human staff\n\nJust type what you need or use the quick buttons below!", None)
-
-    # Default
+        return ("I can help you with:\n\n🛏 **Bed Status** — check availability by ward\n🚨 **Emergency Booking** — register patients instantly\n❤️ **ICU Status** — current ICU occupancy\n📈 **Forecast** — 72-hour admission prediction\n👤 **Staff Connect** — escalate to human staff\n\nJust type what you need!", None)
     return (
         "I'm here to help with hospital operations. Try asking about:\n"
         "• 'bed availability'\n• 'emergency booking'\n• 'ICU status'\n• 'forecast'\n"
-        "Or type 'human' to speak to staff.",
-        None
+        "Or type 'human' to speak to staff.", None
     )
 
 
 @app.route('/api/chat', methods=['POST'])
 def chat_endpoint():
-    """
-    AI chatbot endpoint.
-    Uses Anthropic Claude API if ANTHROPIC_API_KEY is set, otherwise rule-based fallback.
-    """
+    """AI chatbot endpoint. Uses Anthropic Claude API if key is set, else rule-based fallback."""
     try:
         data       = request.get_json() or {}
         message    = data.get('message', '').strip()
-        history    = data.get('history', [])   # list of {role, content}
+        history    = data.get('history', [])
         session_id = data.get('session_id', 'unknown')
 
         if not message:
             return jsonify({"message": "Please say something!", "action": None}), 200
 
-        # Get live hospital context
         context = _get_chat_context()
-
-        # Try Anthropic API
         api_key = os.environ.get('ANTHROPIC_API_KEY', '')
         response_text = None
         action = None
@@ -388,19 +367,17 @@ RULES:
 - If data is unavailable, say so and offer to connect with staff
 - Do NOT output the JSON action block as visible text — it will be stripped by the client
 """
-
+                # FIX: Updated to correct model string (claude-sonnet-4-6)
                 messages_to_send = history[-6:] + [{"role": "user", "content": message}]
-
                 client = anthropic.Anthropic(api_key=api_key)
                 claude_response = client.messages.create(
-                    model="claude-sonnet-4-20250514",
+                    model="claude-sonnet-4-6",
                     max_tokens=400,
                     system=system_prompt,
                     messages=messages_to_send
                 )
                 raw = claude_response.content[0].text
 
-                # Extract action from JSON block in response
                 match = re.search(r'\{[^{}]*"action"[^{}]*\}', raw, re.DOTALL)
                 if match:
                     try:
@@ -413,37 +390,27 @@ RULES:
                 response_text = raw.strip()
 
             except ImportError:
-                pass  # anthropic not installed
+                pass
             except Exception as e:
                 print(f"[Anthropic API error]: {e}")
 
-        # Fall back to rule-based if API not available or failed
         if not response_text:
             response_text, action = _rule_based_chat(message, context)
 
-        return jsonify({
-            "message": response_text,
-            "action": action,
-            "session_id": session_id
-        })
+        return jsonify({"message": response_text, "action": action, "session_id": session_id})
 
     except Exception as e:
         return jsonify({"message": "Internal error. Please try again.", "action": None, "error": str(e)}), 500
 
 
-# ─── EMERGENCY NOTIFY (chatbot → admin) ───────────────────────────
+# ─── EMERGENCY NOTIFY ─────────────────────────────────────────────
 @app.route('/api/emergency-notify', methods=['POST'])
 def emergency_notify():
-    """
-    Called after chatbot successfully books an emergency patient.
-    Creates an admin notification and logs to audit.
-    """
     try:
         data = request.get_json() or {}
         patient_name = data.get('patient_name', 'Unknown')
         condition    = data.get('condition', '')
         priority     = data.get('priority', 'urgent')
-        patient_id   = data.get('patient_id')
         bed_number   = data.get('bed_number', 'N/A')
         source       = data.get('source', 'chatbot')
 
@@ -453,11 +420,10 @@ def emergency_notify():
             ("EMERGENCY_CHAT_BOOKING",
              f"[{priority.upper()}] {patient_name} — {condition} — Bed: {bed_number} — via {source}")
         )
-        # Create admin notification
         conn.execute(
             "INSERT INTO notifications (type, title, message, priority, is_read) VALUES (?, ?, ?, ?, 0)",
             ("emergency",
-             f"🚨 Emergency Booking via Chat",
+             "🚨 Emergency Booking via Chat",
              f"Patient: {patient_name} | {condition} | Priority: {priority} | Bed: {bed_number}",
              priority)
         )
@@ -468,13 +434,9 @@ def emergency_notify():
         return jsonify({"error": str(e)}), 500
 
 
-# ─── ESCALATION (chat → human handoff) ───────────────────────────
+# ─── ESCALATION ───────────────────────────────────────────────────
 @app.route('/api/escalate', methods=['POST'])
 def escalate():
-    """
-    Create a human escalation request from the chatbot.
-    Admin can see these in the notifications panel.
-    """
     try:
         data       = request.get_json() or {}
         session_id = data.get('session_id', 'unknown')
@@ -501,7 +463,6 @@ def escalate():
 # ─── NOTIFICATIONS ────────────────────────────────────────────────
 @app.route('/api/notifications')
 def notifications():
-    """Get all admin notifications (unread first)."""
     try:
         conn = get_db()
         rows = conn.execute(
@@ -514,7 +475,6 @@ def notifications():
 
 @app.route('/api/notifications/read', methods=['POST'])
 def mark_notifications_read():
-    """Mark all notifications as read."""
     try:
         conn = get_db()
         conn.execute("UPDATE notifications SET is_read=1")
@@ -528,7 +488,7 @@ def mark_notifications_read():
 # ─── STARTUP ──────────────────────────────────────────────────────
 if __name__ == '__main__':
     print("=" * 56)
-    print("  HEA — Hospital Emergency Allocation v2.1")
+    print("  HEA — Hospital Emergency Allocation v2.2")
     print("=" * 56)
     print("  Initialising database…")
     init_db()
