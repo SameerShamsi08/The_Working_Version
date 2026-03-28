@@ -1,0 +1,8 @@
+{
+  "name": "hea-project-frontend",
+  "version": "1.0.0",
+  "description": "Hospital Emergency Allocation System Frontend",
+  "scripts": {
+    "dev": "python -m http.server -d frontend 3000"
+  }
+}

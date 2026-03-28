@@ -1,0 +1,236 @@
+<a href="nearby.html"><span class="nav-icon">📍</span> Nearby</a>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HEA — 72-Hour Forecast</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<script src="js/chatbot.js"></script>
+<body>
+
+<header class="header">
+  <a href="dashboard.html" class="header-brand" style="text-decoration:none;">
+    <div class="header-logo-mark">H</div>
+    <div class="header-brand-text">
+      <div class="header-brand-name">HEA</div>
+      <div class="header-brand-sub">Hospital Emergency Allocation</div>
+    </div>
+  </a>
+  <nav class="header-nav">
+    <a href="dashboard.html"><span class="nav-icon">⊞</span> Dashboard</a>
+    <a href="beds.html"><span class="nav-icon">🛏</span> Beds</a>
+    <a href="forecast.html" class="active"><span class="nav-icon">📈</span> Forecast</a>
+    <a href="reports.html"><span class="nav-icon">📋</span> Reports</a>
+  </nav>
+  <div class="header-right">
+    <div class="header-status" id="api-pill">
+      <div class="spinner" style="width:8px;height:8px;border-width:1.5px;border-top-color:#67e8f9;"></div>
+      <span>Connecting…</span>
+    </div>
+  </div>
+</header>
+
+<main class="main">
+
+  <div class="page-header anim-fade-up">
+    <div class="page-title-group">
+      <div class="page-title">72-Hour AI Forecast</div>
+      <div class="page-subtitle" id="model-status">Fetching predictions…</div>
+    </div>
+    <button class="btn btn-outline btn-sm" onclick="loadForecast()">↻ Refresh</button>
+  </div>
+
+  <!-- Model status banner -->
+  <div id="model-banner" class="conn-bar" style="display:none;margin-bottom:16px;"></div>
+
+  <!-- Forecast cards + chart side by side -->
+  <div class="grid-3 anim-fade-up delay-1" id="forecast-summary-cards" style="margin-bottom:20px;">
+    <div class="stat-card"><div class="loading"><div class="spinner"></div></div></div>
+    <div class="stat-card"><div class="loading"><div class="spinner"></div></div></div>
+    <div class="stat-card"><div class="loading"><div class="spinner"></div></div></div>
+  </div>
+
+  <div class="card anim-fade-up delay-2" style="margin-bottom:20px;">
+    <div class="card-header">
+      <div class="card-title">Predicted Admission Load — Next 3 Days</div>
+      <div id="chart-model-tag" style="font-size:11px;padding:3px 8px;border-radius:100px;"></div>
+    </div>
+    <div id="forecast-chart">
+      <div class="loading"><div class="spinner"></div> Running predictions…</div>
+    </div>
+  </div>
+
+  <div class="card anim-fade-up delay-3">
+    <div class="card-header">
+      <div class="card-title">Forecast Details</div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Day</th>
+            <th>Date</th>
+            <th>Total Admissions</th>
+            <th>Emergency</th>
+            <th>ICU</th>
+            <th>Holiday</th>
+            <th>Surge Alert</th>
+            <th>Model</th>
+          </tr>
+        </thead>
+        <tbody id="forecast-tbody">
+          <tr><td colspan="8"><div class="loading"><div class="spinner"></div></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card anim-fade-up delay-4" style="margin-top:20px;border-left:3px solid var(--cyan-500);">
+    <div class="card-title">How the AI Works</div>
+    <p style="font-size:13px;color:#475569;line-height:1.7;margin-top:8px;">
+      The model is a <strong>Random Forest Regressor</strong> (scikit-learn) trained on historical Indian hospital admission data.
+      It learns patterns from day-of-week, month, and public holiday flags to forecast admissions, ICU demand,
+      and emergency load for the next 72 hours. Training takes ~2 seconds on any modern machine.
+    </p>
+    <p style="font-size:12px;color:#94a3b8;margin-top:10px;">
+      If the model file <code>hea_model.pkl</code> doesn't exist, the system falls back to a rule-based heuristic.
+      Run <code>python ml/train_model.py</code> from the <code>backend/</code> folder to enable full ML predictions.
+    </p>
+  </div>
+
+</main>
+
+<div class="toast" id="toast"></div>
+<script src="js/charts.js"></script>
+<script>
+  const API = 'http://localhost:5000/api';
+
+  async function checkApiHealth() {
+    const pill = document.getElementById('api-pill');
+    try {
+      const res = await fetch(`${API}/health`, { signal: AbortSignal.timeout(3000) });
+      const d = await res.json();
+      if (d.status === 'ok') {
+        pill.innerHTML = '<div class="live-dot"></div><span>API Live</span>';
+        pill.style.color = '#34d399';
+      }
+    } catch {
+      pill.innerHTML = '<span style="color:#fb7185;">✕ Offline</span>';
+      pill.style.color = '#fb7185';
+    }
+  }
+
+  async function loadForecast() {
+    document.getElementById('forecast-chart').innerHTML = '<div class="loading"><div class="spinner"></div> Running predictions…</div>';
+    document.getElementById('forecast-tbody').innerHTML = '<tr><td colspan="8"><div class="loading"><div class="spinner"></div></div></td></tr>';
+
+    try {
+      const data = await fetch(`${API}/forecast`).then(r => r.json());
+      checkApiHealth();
+
+      // Summary cards
+      const totals = data.reduce((acc, d) => ({
+        admissions: acc.admissions + d.predicted_admissions,
+        icu: acc.icu + d.predicted_icu,
+        emergency: acc.emergency + d.predicted_emergency
+      }), {admissions:0, icu:0, emergency:0});
+
+      const hasSurge = data.some(d => d.surge_alert);
+
+      document.getElementById('forecast-summary-cards').innerHTML = `
+        <div class="stat-card anim-fade-up delay-1">
+          <div class="stat-card-inner">
+            <div>
+              <div class="stat-label">Total 3-Day Admissions</div>
+              <div class="stat-value">${totals.admissions}</div>
+              <div class="stat-sub">${Math.round(totals.admissions/3)} avg per day</div>
+            </div>
+            <div class="stat-icon navy">📋</div>
+          </div>
+        </div>
+        <div class="stat-card ${hasSurge ? 'red' : 'amber'} anim-fade-up delay-2">
+          <div class="stat-card-inner">
+            <div>
+              <div class="stat-label">Emergency Load</div>
+              <div class="stat-value">${totals.emergency}</div>
+              <div class="stat-sub">${Math.round(totals.emergency/3)} expected per day</div>
+            </div>
+            <div class="stat-icon red">🚨</div>
+          </div>
+        </div>
+        <div class="stat-card amber anim-fade-up delay-3">
+          <div class="stat-card-inner">
+            <div>
+              <div class="stat-label">ICU Demand</div>
+              <div class="stat-value">${totals.icu}</div>
+              <div class="stat-sub">monitor capacity closely</div>
+            </div>
+            <div class="stat-icon amber">❤️</div>
+          </div>
+        </div>
+      `;
+
+      // Chart
+      renderForecastBars('forecast-chart', data);
+
+      // Model tag
+      const modelUsed = data[0]?.model_used || 'unknown';
+      const tag = document.getElementById('chart-model-tag');
+      const modelStatus = document.getElementById('model-status');
+      const banner = document.getElementById('model-banner');
+
+      if (modelUsed === 'trained_rf') {
+        tag.style.cssText = 'background:#d1fae5;color:#065f46;font-weight:700;font-size:11px;padding:3px 10px;border-radius:100px;';
+        tag.textContent = '✓ Random Forest ML';
+        modelStatus.textContent = 'Using trained scikit-learn Random Forest model';
+        banner.style.display = 'none';
+      } else {
+        tag.style.cssText = 'background:#fef3c7;color:#92400e;font-weight:700;font-size:11px;padding:3px 10px;border-radius:100px;';
+        tag.textContent = '⚠ Heuristic fallback';
+        modelStatus.textContent = 'Rule-based fallback active — ML model not trained';
+        banner.className = 'conn-bar';
+        banner.style.cssText = 'background:#fffbeb;border:1px solid rgba(245,158,11,0.25);color:#92400e;display:flex;align-items:center;gap:12px;padding:10px 16px;border-radius:10px;font-size:13px;font-weight:500;margin-bottom:16px;';
+        banner.innerHTML = '⚠ ML model not trained. Run <code style="background:rgba(0,0,0,0.07);padding:2px 6px;border-radius:4px;">python ml/train_model.py</code> in the backend folder for higher-accuracy predictions.';
+      }
+
+      // Detail table
+      const tbody = document.getElementById('forecast-tbody');
+      tbody.innerHTML = data.map(d => `
+        <tr>
+          <td style="font-weight:700;color:#0f172a;">${d.day}</td>
+          <td style="color:#64748b;font-size:12px;">${d.date}</td>
+          <td style="font-weight:700;font-size:16px;color:var(--navy-700);">${d.predicted_admissions}</td>
+          <td style="color:var(--rose-600);font-weight:600;">${d.predicted_emergency}</td>
+          <td style="color:var(--amber-500);font-weight:600;">${d.predicted_icu}</td>
+          <td>${d.is_holiday
+            ? '<span class="badge badge-amber">🎉 Holiday</span>'
+            : '<span style="color:#94a3b8;font-size:12px;">—</span>'
+          }</td>
+          <td>${d.surge_alert
+            ? '<span class="badge badge-red">🚨 Surge</span>'
+            : '<span class="badge badge-green">✓ Normal</span>'
+          }</td>
+          <td><span class="badge ${d.model_used === 'trained_rf' ? 'badge-cyan' : 'badge-amber'}" style="font-size:9px;">
+            ${d.model_used === 'trained_rf' ? 'ML' : 'Heuristic'}
+          </span></td>
+        </tr>
+      `).join('');
+
+    } catch (e) {
+      document.getElementById('forecast-chart').innerHTML = `
+        <div class="empty-state">
+          <div class="empty-state-icon">📡</div>
+          <div style="font-weight:600;color:#334155;">Cannot reach API</div>
+          <p>Make sure <code>python app.py</code> is running in the backend folder.</p>
+          <button class="btn btn-outline btn-sm" onclick="loadForecast()" style="margin-top:14px;">Try again</button>
+        </div>`;
+      document.getElementById('forecast-tbody').innerHTML = '<tr><td colspan="8" style="text-align:center;color:#e11d48;padding:20px;">API unavailable</td></tr>';
+    }
+  }
+
+  loadForecast();
+</script>
+</body>
+</html>

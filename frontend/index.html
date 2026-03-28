@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HEA — Sign In</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    body { background: #040d1e; }
+
+    /* Animated grid background */
+    .login-visual-grid {
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(6,182,212,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(6,182,212,0.04) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+    }
+
+    /* Floating cards decoration */
+    .floating-card {
+      position: absolute;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 12px;
+      padding: 14px 16px;
+      backdrop-filter: blur(10px);
+      animation: float 4s ease-in-out infinite;
+      z-index: 2;
+    }
+    .floating-card-title { font-size: 10px; color: rgba(255,255,255,0.4); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px; }
+    .floating-card-val   { font-family: 'Outfit', sans-serif; font-size: 22px; font-weight: 700; color: white; letter-spacing: -0.5px; }
+    .floating-card-sub   { font-size: 10px; color: rgba(255,255,255,0.35); margin-top: 2px; }
+    .floating-card.fc-1  { top: 18%; right: 6%; animation-delay: 0s; }
+    .floating-card.fc-2  { top: 42%; right: 12%; animation-delay: 1.3s; }
+    .floating-card.fc-3  { bottom: 22%; right: 5%; animation-delay: 0.7s; }
+
+    /* Right panel polish */
+    .login-form-panel {
+      background: linear-gradient(160deg, #fff 0%, #f8fafc 100%);
+    }
+
+    /* Divider */
+    .or-divider {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 22px 0;
+      font-size: 11px;
+      color: #94a3b8;
+      font-weight: 500;
+    }
+    .or-divider::before,
+    .or-divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: #e2e8f0;
+    }
+
+    /* Feature list */
+    .feature-list { list-style: none; margin-top: 32px; }
+    .feature-list li {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      color: rgba(255,255,255,0.55);
+      padding: 6px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+    .feature-list li:last-child { border-bottom: none; }
+    .feature-list li::before { content: '✓'; color: #34d399; font-weight: 700; font-size: 12px; }
+  </style>
+</head>
+<body>
+
+<div class="login-page">
+
+  <!-- ── Left visual panel ── -->
+  <div class="login-visual">
+    <div class="login-visual-grid"></div>
+
+    <!-- Floating stat cards -->
+    <div class="floating-card fc-1">
+      <div class="floating-card-title">Current Occupancy</div>
+      <div class="floating-card-val">67<span style="font-size:14px;opacity:0.7;">%</span></div>
+      <div class="floating-card-sub">↓ 3% from yesterday</div>
+    </div>
+    <div class="floating-card fc-2">
+      <div class="floating-card-title">ICU Available</div>
+      <div class="floating-card-val">4 <span style="font-size:14px;opacity:0.7;">beds</span></div>
+      <div class="floating-card-sub">of 8 total</div>
+    </div>
+    <div class="floating-card fc-3">
+      <div class="floating-card-title">Today's Admissions</div>
+      <div class="floating-card-val">12</div>
+      <div class="floating-card-sub">↑ 2 from forecast</div>
+    </div>
+
+    <!-- Logo -->
+    <div class="login-visual-logo" style="position:relative;z-index:3;">
+      <div class="login-visual-logo-mark">H</div>
+      <div>
+        <div class="login-visual-logo-text">HEA</div>
+        <div class="login-visual-logo-sub">Hospital Emergency Allocation</div>
+      </div>
+    </div>
+
+    <!-- Main content -->
+    <div class="login-visual-content" style="position:relative;z-index:3;">
+      <div class="login-visual-heading">
+        Real-time hospital<br><span>resource intelligence</span>
+      </div>
+      <div class="login-visual-desc">
+        Bed allocation, AI-powered demand forecasting, and automated surge alerts — all in one dashboard built for Indian hospitals.
+      </div>
+      <ul class="feature-list">
+        <li>Live bed map across all wards</li>
+        <li>72-hour AI admission forecast</li>
+        <li>Automated ICU & resource alerts</li>
+        <li>One-click PDF report generation</li>
+      </ul>
+    </div>
+
+    <!-- Bottom bar -->
+    <div class="login-visual-stats" style="position:relative;z-index:3;">
+      <div class="login-stat">
+        <div class="login-stat-val">58</div>
+        <div class="login-stat-lbl">Total Beds</div>
+      </div>
+      <div class="login-stat">
+        <div class="login-stat-val">5</div>
+        <div class="login-stat-lbl">Wards</div>
+      </div>
+      <div class="login-stat">
+        <div class="login-stat-val">~96%</div>
+        <div class="login-stat-lbl">ML Accuracy</div>
+      </div>
+    </div>
+
+    <div class="login-visual-footer" style="position:relative;z-index:3;">
+      Team LUMEN · HackCraft 3.0 · Built with Flask + SQLite + Scikit-learn
+    </div>
+  </div>
+
+  <!-- ── Right form panel ── -->
+  <div class="login-form-panel">
+    <div class="login-form-wrap">
+
+      <div style="margin-bottom:36px;">
+        <div class="login-form-title">Welcome back</div>
+        <div class="login-form-sub">Sign in to the HEA dashboard to continue</div>
+      </div>
+
+      <div class="login-input-group">
+        <div class="login-input-label">Username</div>
+        <div class="login-input-wrap">
+          <span class="login-input-icon">👤</span>
+          <input type="text" id="username" class="login-input"
+                 placeholder="Enter your username" value="admin"
+                 autocomplete="username" onkeydown="handleKey(event)">
+        </div>
+      </div>
+
+      <div class="login-input-group">
+        <div class="login-input-label">Password</div>
+        <div class="login-input-wrap">
+          <span class="login-input-icon">🔒</span>
+          <input type="password" id="password" class="login-input"
+                 placeholder="Enter your password" value="admin123"
+                 autocomplete="current-password" onkeydown="handleKey(event)">
+          <button onclick="togglePwd()" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:15px;color:#94a3b8;" id="pwd-toggle">👁</button>
+        </div>
+      </div>
+
+      <div id="login-error" class="login-error">
+        <span>⚠</span>
+        <span id="login-error-msg">Invalid username or password.</span>
+      </div>
+
+      <button class="login-btn" id="login-btn" onclick="login()">
+        Sign In to Dashboard
+      </button>
+
+      <div class="login-hint">
+        <span>💡</span>
+        <span>Demo credentials: <strong>admin</strong> / <strong>admin123</strong></span>
+      </div>
+
+      <div style="margin-top:32px;padding-top:24px;border-top:1px solid #e2e8f0;text-align:center;">
+        <div style="font-size:11px;color:#94a3b8;margin-bottom:12px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;">System Status</div>
+        <div style="display:flex;align-items:center;justify-content:center;gap:20px;">
+          <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:#64748b;" id="api-status-indicator">
+            <div class="spinner" style="width:12px;height:12px;border-width:1.5px;"></div>
+            <span>Checking API…</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // Skip login if already authenticated
+  if (sessionStorage.getItem('hea_auth')) window.location.href = 'dashboard.html';
+
+  const API = 'http://localhost:5000/api';
+
+  // Check API health
+  async function checkApiHealth() {
+    const el = document.getElementById('api-status-indicator');
+    try {
+      const res = await fetch(`${API}/health`, { signal: AbortSignal.timeout(3000) });
+      const data = await res.json();
+      if (data.status === 'ok') {
+        el.innerHTML = '<div style="width:8px;height:8px;border-radius:50%;background:#10b981;animation:pulse-dot 2s infinite;"></div><span style="color:#065f46;font-weight:600;">API Connected</span>';
+      } else {
+        el.innerHTML = '<span>⚠</span><span style="color:#92400e;">API returned error</span>';
+      }
+    } catch {
+      el.innerHTML = '<span style="color:#e11d48;">⚠</span><span style="color:#e11d48;font-weight:600;">API Offline</span><span style="color:#94a3b8;font-size:10px;"> — run python app.py</span>';
+    }
+  }
+  checkApiHealth();
+
+  function handleKey(e) { if (e.key === 'Enter') login(); }
+
+  function togglePwd() {
+    const inp = document.getElementById('password');
+    const btn = document.getElementById('pwd-toggle');
+    if (inp.type === 'password') { inp.type = 'text'; btn.textContent = '🙈'; }
+    else { inp.type = 'password'; btn.textContent = '👁'; }
+  }
+
+  function login() {
+    const u = document.getElementById('username').value.trim();
+    const p = document.getElementById('password').value.trim();
+    const btn = document.getElementById('login-btn');
+    const errEl = document.getElementById('login-error');
+    const errMsg = document.getElementById('login-error-msg');
+
+    errEl.style.display = 'none';
+
+    // Loading state
+    btn.classList.add('loading');
+    btn.disabled = true;
+    btn.textContent = 'Signing in…';
+
+    setTimeout(() => {
+      if (u === 'admin' && p === 'admin123') {
+        sessionStorage.setItem('hea_auth', '1');
+        sessionStorage.setItem('hea_user', u);
+        btn.textContent = '✓ Authenticated — redirecting…';
+        btn.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+        setTimeout(() => window.location.href = 'dashboard.html', 500);
+      } else {
+        btn.classList.remove('loading');
+        btn.disabled = false;
+        btn.textContent = 'Sign In to Dashboard';
+        errMsg.textContent = `Incorrect credentials. Try admin / admin123.`;
+        errEl.style.display = 'flex';
+        document.getElementById('password').value = '';
+        document.getElementById('password').focus();
+
+        // Shake animation
+        const wrap = document.querySelector('.login-form-wrap');
+        wrap.style.transform = 'translateX(-8px)';
+        setTimeout(() => { wrap.style.transform = 'translateX(8px)'; }, 80);
+        setTimeout(() => { wrap.style.transform = 'translateX(-5px)'; }, 160);
+        setTimeout(() => { wrap.style.transform = 'translateX(0)'; wrap.style.transition = 'transform 0.3s'; }, 240);
+      }
+    }, 600);
+  }
+</script>
+</body>
+</html>

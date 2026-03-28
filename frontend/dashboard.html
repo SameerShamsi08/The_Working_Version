@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HEA — Dashboard</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .notif-bell {
+      position: relative;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      padding: 7px 10px;
+      cursor: pointer;
+      color: rgba(255,255,255,0.7);
+      font-size: 18px;
+      transition: all 0.15s;
+      display: flex;
+      align-items: center;
+    }
+    .notif-bell:hover { background: rgba(255,255,255,0.14); color: white; }
+    .notif-bell-badge {
+      position: absolute;
+      top: -4px;
+      right: -4px;
+      width: 18px;
+      height: 18px;
+      background: #e11d48;
+      border-radius: 50%;
+      font-size: 10px;
+      font-weight: 800;
+      color: white;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      border: 2px solid #071530;
+      animation: pulse-dot 1.5s ease-in-out infinite;
+    }
+    .notif-panel {
+      display: none;
+      position: absolute;
+      top: calc(100% + 8px);
+      right: 0;
+      width: 340px;
+      background: white;
+      border: 1px solid #e2e8f0;
+      border-radius: 14px;
+      box-shadow: 0 16px 40px rgba(7,21,48,0.18);
+      z-index: 500;
+      overflow: hidden;
+    }
+    .notif-panel.open { display: block; animation: fadeUp 0.2s ease; }
+    .notif-panel-header {
+      padding: 14px 16px;
+      border-bottom: 1px solid #f1f5f9;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-family: 'Outfit', sans-serif;
+      font-weight: 700;
+      font-size: 13px;
+      color: #0f172a;
+    }
+    .notif-item {
+      padding: 11px 16px;
+      border-bottom: 1px solid #f8fafc;
+      animation: fadeUp 0.2s ease;
+    }
+    .notif-item.unread { background: #f0fdf4; }
+    .notif-item:last-child { border-bottom: none; }
+    .notif-title { font-weight: 700; font-size: 12px; color: #0f172a; margin-bottom: 3px; }
+    .notif-msg { font-size: 11px; color: #64748b; line-height: 1.5; }
+    .notif-time { font-size: 10px; color: #94a3b8; margin-top: 4px; }
+    .notif-empty { padding: 24px; text-align: center; color: #94a3b8; font-size: 13px; }
+  </style>
+</head>
+<body>
+
+<header class="header">
+  <a href="dashboard.html" class="header-brand" style="text-decoration:none;">
+    <div class="header-logo-mark">H</div>
+    <div class="header-brand-text">
+      <div class="header-brand-name">HEA</div>
+      <div class="header-brand-sub">Hospital Emergency Allocation</div>
+    </div>
+  </a>
+
+  <nav class="header-nav">
+    <a href="dashboard.html" class="active"><span class="nav-icon">⊞</span> Dashboard</a>
+    <a href="beds.html"><span class="nav-icon">🛏</span> Beds</a>
+    <a href="forecast.html"><span class="nav-icon">📈</span> Forecast</a>
+    <a href="reports.html"><span class="nav-icon">📋</span> Reports</a>
+    <a href="nearby.html"><span class="nav-icon">📍</span> Nearby</a>
+  </nav>
+
+  <div class="header-right" style="display:flex;align-items:center;gap:10px;">
+
+    <!-- Notification bell -->
+    <div style="position:relative;" id="notif-wrap">
+      <div class="notif-bell" onclick="toggleNotifPanel()" id="notif-bell">
+        🔔
+        <div class="notif-bell-badge" id="notif-badge"></div>
+      </div>
+      <div class="notif-panel" id="notif-panel">
+        <div class="notif-panel-header">
+          Admin Notifications
+          <button onclick="markAllRead()" style="font-size:11px;color:#06b6d4;background:none;border:none;cursor:pointer;font-weight:600;">Mark all read</button>
+        </div>
+        <div id="notif-list"><div class="notif-empty">Loading…</div></div>
+      </div>
+    </div>
+
+    <div class="header-status" id="api-pill">
+      <div class="spinner" style="width:8px;height:8px;border-width:1.5px;border-top-color:#67e8f9;"></div>
+      <span>Connecting…</span>
+    </div>
+  </div>
+</header>
+
+<main class="main">
+
+  <div class="page-header anim-fade-up">
+    <div class="page-title-group">
+      <div class="page-title">Overview Dashboard</div>
+      <div class="page-subtitle" id="last-updated">Loading hospital data…</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn btn-outline btn-sm" onclick="loadDashboard()">↻ Refresh</button>
+      <button class="btn btn-success btn-sm" onclick="openAdmitModal()">+ Admit Patient</button>
+    </div>
+  </div>
+
+  <div class="conn-bar error anim-fade-up" id="conn-error" style="display:none;">
+    ⚠ &nbsp;Cannot reach API at <code>http://localhost:5000</code> — run <code>python app.py</code> in the backend folder.
+    <button class="btn btn-sm btn-outline" onclick="loadDashboard()" style="margin-left:auto;">Retry</button>
+  </div>
+
+  <div id="alerts-container" class="alerts-section"></div>
+
+  <div class="stats-grid" id="stats-grid">
+    <div class="stat-card"><div class="loading"><div class="spinner"></div></div></div>
+    <div class="stat-card"><div class="loading"><div class="spinner"></div></div></div>
+    <div class="stat-card"><div class="loading"><div class="spinner"></div></div></div>
+    <div class="stat-card"><div class="loading"><div class="spinner"></div></div></div>
+  </div>
+
+  <div class="grid-2" style="margin-bottom:24px;">
+    <div class="card anim-fade-up delay-2">
+      <div class="card-header">
+        <div class="card-title">Ward Occupancy</div>
+        <a href="beds.html" class="btn btn-ghost btn-xs">View map →</a>
+      </div>
+      <div id="ward-occupancy"><div class="loading"><div class="spinner"></div></div></div>
+    </div>
+    <div class="card anim-fade-up delay-3">
+      <div class="card-header">
+        <div class="card-title">Resource Availability</div>
+        <span id="resources-updated" style="font-size:11px;color:#94a3b8;"></span>
+      </div>
+      <div id="resources-list"><div class="loading"><div class="spinner"></div></div></div>
+    </div>
+  </div>
+
+  <div class="section-divider anim-fade-up delay-4"><h2>Active Patients</h2></div>
+
+  <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center;" class="anim-fade-up delay-5">
+    <input type="text" id="patient-search" placeholder="Search by name or condition…"
+           style="padding:7px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;flex:1;min-width:200px;max-width:320px;outline:none;font-family:inherit;"
+           oninput="filterPatients(this.value)">
+    <select id="priority-filter" onchange="filterPatients(document.getElementById('patient-search').value)"
+            style="padding:7px 10px;border:1px solid #e2e8f0;border-radius:8px;font-size:12px;font-family:inherit;outline:none;color:#475569;">
+      <option value="">All priorities</option>
+      <option value="critical">Critical</option>
+      <option value="urgent">Urgent</option>
+      <option value="normal">Normal</option>
+    </select>
+    <span id="patient-count" style="font-size:12px;color:#94a3b8;"></span>
+  </div>
+
+  <div class="card anim-fade-up delay-6">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th><th>Patient</th><th>Age</th><th>Condition</th>
+            <th>Priority</th><th>Ward / Bed</th><th>Admitted</th><th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="patients-tbody">
+          <tr><td colspan="8"><div class="loading"><div class="spinner"></div></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</main>
+
+<!-- Admit Modal -->
+<div class="modal-overlay" id="admit-modal">
+  <div class="modal-box">
+    <div class="modal-title">Admit New Patient</div>
+    <div class="form-row">
+      <div class="form-group"><label>Full Name *</label><input type="text" id="p-name" placeholder="Patient's full name"></div>
+      <div class="form-group"><label>Age *</label><input type="number" id="p-age" placeholder="Age" min="0" max="150"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Gender</label>
+        <select id="p-gender"><option value="Male">Male</option><option value="Female">Female</option><option value="Other">Other</option></select>
+      </div>
+      <div class="form-group"><label>Priority</label>
+        <select id="p-priority"><option value="normal">Normal</option><option value="urgent">Urgent</option><option value="critical">Critical</option></select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Condition / Diagnosis *</label><input type="text" id="p-condition" placeholder="e.g. Fracture, Cardiac arrest"></div>
+      <div class="form-group"><label>Preferred Ward</label>
+        <select id="p-ward">
+          <option value="">Auto-assign</option>
+          <option value="General">General</option>
+          <option value="ICU">ICU</option>
+          <option value="Emergency">Emergency</option>
+          <option value="Pediatric">Pediatric</option>
+          <option value="Maternity">Maternity</option>
+        </select>
+      </div>
+    </div>
+    <div id="admit-error" style="display:none;padding:9px 12px;background:#fff1f2;border:1px solid rgba(225,29,72,0.2);border-radius:8px;color:#e11d48;font-size:12px;font-weight:500;margin-top:4px;"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeAdmitModal()">Cancel</button>
+      <button class="btn btn-success" id="admit-btn" onclick="admitPatient()">✓ Admit &amp; Assign Bed</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="js/charts.js"></script>
+<script src="js/dashboard.js"></script>
+<script src="js/chatbot.js"></script>
+<script>
+  // ── Notification panel ──────────────────────────────────────
+  async function loadNotifications() {
+    try {
+      const res = await fetch('http://localhost:5000/api/notifications');
+      const data = await res.json();
+
+      const unread = data.filter(n => !n.is_read).length;
+      const badge  = document.getElementById('notif-badge');
+      badge.textContent = unread > 9 ? '9+' : unread;
+      badge.style.display = unread > 0 ? 'flex' : 'none';
+
+      const list = document.getElementById('notif-list');
+      if (!data.length) {
+        list.innerHTML = '<div class="notif-empty">No notifications</div>';
+        return;
+      }
+
+      const typeIcon = { emergency:'🚨', escalation:'👤', info:'ℹ' };
+      list.innerHTML = data.slice(0, 12).map(n => `
+        <div class="notif-item ${n.is_read ? '' : 'unread'}">
+          <div class="notif-title">${typeIcon[n.type] || '🔔'} ${n.title}</div>
+          <div class="notif-msg">${n.message || ''}</div>
+          <div class="notif-time">${new Date(n.created_at).toLocaleString('en-IN', {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</div>
+        </div>
+      `).join('');
+    } catch { /* API might not be up yet */ }
+  }
+
+  function toggleNotifPanel() {
+    const panel = document.getElementById('notif-panel');
+    panel.classList.toggle('open');
+    if (panel.classList.contains('open')) loadNotifications();
+  }
+
+  async function markAllRead() {
+    await fetch('http://localhost:5000/api/notifications/read', { method: 'POST' }).catch(() => {});
+    document.getElementById('notif-badge').style.display = 'none';
+    loadNotifications();
+  }
+
+  // Close panel on outside click
+  document.addEventListener('click', (e) => {
+    if (!document.getElementById('notif-wrap')?.contains(e.target)) {
+      document.getElementById('notif-panel')?.classList.remove('open');
+    }
+  });
+
+  // Reload notifications on dashboard refresh
+  setTimeout(loadNotifications, 1500);
+  setInterval(loadNotifications, 30000);
+</script>
+</body>
+</html>

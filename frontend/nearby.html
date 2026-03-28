@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HEA — Nearby Hospitals</title>
+  <link rel="stylesheet" href="css/style.css">
+  <!-- Leaflet.js -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <style>
+    #map {
+      height: 100%;
+      border-radius: 0 var(--r-lg) var(--r-lg) 0;
+      z-index: 1;
+    }
+    .map-layout {
+      display: grid;
+      grid-template-columns: 380px 1fr;
+      height: calc(100vh - 62px - 56px);
+      min-height: 500px;
+      gap: 0;
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      overflow: hidden;
+      box-shadow: var(--shadow-md);
+    }
+    @media (max-width: 900px) {
+      .map-layout { grid-template-columns: 1fr; grid-template-rows: 280px 1fr; }
+      #map { border-radius: 0; }
+    }
+    .sidebar {
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--border);
+      overflow: hidden;
+      background: var(--surface);
+    }
+    .sidebar-header {
+      padding: 18px 20px 14px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      flex-shrink: 0;
+    }
+    .sidebar-title {
+      font-family: var(--font-display);
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 12px;
+    }
+    .radius-control {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+    .radius-control input[type=range] {
+      flex: 1;
+      accent-color: var(--cyan-500);
+    }
+    .search-box {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .search-box input {
+      flex: 1;
+      padding: 8px 12px;
+      border: 1px solid var(--border-strong);
+      border-radius: var(--r-md);
+      font-size: 12px;
+      font-family: var(--font-body);
+      outline: none;
+    }
+    .search-box input:focus { border-color: var(--cyan-500); }
+    .search-box button {
+      padding: 8px 14px;
+      background: var(--navy-700);
+      color: white;
+      border: none;
+      border-radius: var(--r-md);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: var(--font-body);
+      transition: background 0.15s;
+      white-space: nowrap;
+    }
+    .search-box button:hover { background: var(--navy-600); }
+    .hospital-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 0;
+    }
+    .hospital-card {
+      padding: 13px 20px;
+      border-bottom: 1px solid var(--gray-100);
+      cursor: pointer;
+      transition: background 0.12s;
+      position: relative;
+    }
+    .hospital-card:hover { background: var(--gray-50); }
+    .hospital-card.selected { background: var(--cyan-50); border-left: 3px solid var(--cyan-500); }
+    .hosp-name {
+      font-weight: 700;
+      font-size: 13px;
+      color: var(--text-primary);
+      margin-bottom: 3px;
+      padding-right: 50px;
+    }
+    .hosp-address {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+      line-height: 1.4;
+    }
+    .hosp-meta {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .hosp-dist {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--cyan-500);
+      background: var(--cyan-50);
+      padding: 2px 7px;
+      border-radius: 100px;
+    }
+    .hosp-type {
+      font-size: 10px;
+      color: var(--text-muted);
+      background: var(--gray-100);
+      padding: 2px 7px;
+      border-radius: 100px;
+      text-transform: capitalize;
+    }
+    .hosp-actions {
+      display: flex;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .hosp-btn {
+      padding: 4px 10px;
+      border-radius: 5px;
+      font-size: 11px;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      font-family: var(--font-body);
+      transition: all 0.12s;
+    }
+    .hosp-btn.dir { background: var(--navy-700); color: white; }
+    .hosp-btn.dir:hover { background: var(--navy-600); }
+    .hosp-btn.call { background: var(--emerald-100); color: var(--emerald-500); }
+    .hosp-btn.call:hover { background: var(--emerald-50); }
+
+    /* Status bar below map */
+    .map-status {
+      padding: 8px 20px;
+      background: var(--gray-50);
+      border-top: 1px solid var(--border);
+      font-size: 11px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+    .map-wrapper {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Legend */
+    .map-legend {
+      position: absolute;
+      bottom: 32px;
+      right: 12px;
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: var(--r-md);
+      padding: 10px 13px;
+      font-size: 11px;
+      z-index: 1000;
+      box-shadow: var(--shadow-sm);
+    }
+    .map-legend-item {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      margin-bottom: 5px;
+      color: var(--text-secondary);
+    }
+    .map-legend-item:last-child { margin-bottom: 0; }
+    .leg-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+
+    /* Leaflet popup overrides */
+    .leaflet-popup-content { font-family: var(--font-body) !important; font-size: 13px; }
+    .popup-name { font-family: var(--font-display); font-weight: 700; font-size: 14px; margin-bottom: 4px; }
+    .popup-dist { font-size: 11px; color: var(--cyan-500); font-weight: 700; margin-bottom: 6px; }
+    .popup-addr { font-size: 11px; color: #64748b; margin-bottom: 10px; line-height: 1.4; }
+    .popup-btn {
+      display: inline-block;
+      padding: 6px 14px;
+      background: var(--navy-700);
+      color: white;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      text-decoration: none;
+      margin-right: 6px;
+    }
+    .popup-btn:hover { background: var(--navy-600); color: white; }
+
+    /* Skeleton / loading */
+    .sidebar-loading {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 16px 20px;
+    }
+    .skel-line {
+      height: 14px;
+      background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.4s ease-in-out infinite;
+      border-radius: 4px;
+    }
+    @keyframes shimmer {
+      0% { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+    .skel-card { padding: 13px 20px; border-bottom: 1px solid #f1f5f9; }
+
+    /* Error state */
+    .geo-error {
+      padding: 20px;
+      text-align: center;
+      color: var(--text-muted);
+    }
+    .geo-error-icon { font-size: 32px; margin-bottom: 10px; }
+    .geo-error h3 { font-size: 14px; font-weight: 700; color: var(--text-primary); margin-bottom: 8px; }
+    .geo-error p { font-size: 12px; line-height: 1.6; }
+
+    /* Count badge */
+    .result-count {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--cyan-500);
+      background: var(--cyan-50);
+      padding: 2px 8px;
+      border-radius: 100px;
+      display: inline-block;
+    }
+  </style>
+</head>
+<body>
+
+<header class="header">
+  <a href="dashboard.html" class="header-brand" style="text-decoration:none;">
+    <div class="header-logo-mark">H</div>
+    <div class="header-brand-text">
+      <div class="header-brand-name">HEA</div>
+      <div class="header-brand-sub">Hospital Emergency Allocation</div>
+    </div>
+  </a>
+  <nav class="header-nav">
+    <a href="dashboard.html"><span class="nav-icon">⊞</span> Dashboard</a>
+    <a href="beds.html"><span class="nav-icon">🛏</span> Beds</a>
+    <a href="forecast.html"><span class="nav-icon">📈</span> Forecast</a>
+    <a href="reports.html"><span class="nav-icon">📋</span> Reports</a>
+    <a href="nearby.html" class="active"><span class="nav-icon">📍</span> Nearby</a>
+  </nav>
+  <div class="header-right">
+    <div class="header-status" id="api-pill">
+      <div class="live-dot"></div>
+      <span id="hosp-count">Finding hospitals…</span>
+    </div>
+  </div>
+</header>
+
+<main class="main" style="padding-top:16px;padding-bottom:16px;">
+
+  <!-- Page header -->
+  <div class="page-header anim-fade-up" style="margin-bottom:16px;">
+    <div class="page-title-group">
+      <div class="page-title">Nearby Hospitals</div>
+      <div class="page-subtitle" id="location-status">Requesting your location…</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn btn-outline btn-sm" onclick="refresh()">↻ Refresh</button>
+      <button class="btn btn-cyan btn-sm" onclick="centerOnMe()">📍 My Location</button>
+    </div>
+  </div>
+
+  <!-- Map layout -->
+  <div class="map-layout anim-fade-up delay-1">
+
+    <!-- Left sidebar -->
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-title">
+          Hospitals Found
+          <span class="result-count" id="result-count">–</span>
+        </div>
+
+        <div class="radius-control">
+          <span>Radius:</span>
+          <input type="range" id="radius-slider" min="1000" max="20000" step="500" value="5000"
+                 oninput="updateRadius(this.value)">
+          <span id="radius-label">5 km</span>
+        </div>
+
+        <div class="search-box">
+          <input type="text" id="city-input" placeholder="Search city / area…" value=""
+                 onkeydown="if(event.key==='Enter') searchCity()">
+          <button onclick="searchCity()">🔍 Go</button>
+        </div>
+      </div>
+
+      <div class="hospital-list" id="hospital-list">
+        <div class="sidebar-loading">
+          <div class="skel-card">
+            <div class="skel-line" style="width:70%;margin-bottom:6px;"></div>
+            <div class="skel-line" style="width:90%;height:10px;"></div>
+          </div>
+          <div class="skel-card">
+            <div class="skel-line" style="width:80%;margin-bottom:6px;"></div>
+            <div class="skel-line" style="width:60%;height:10px;"></div>
+          </div>
+          <div class="skel-card">
+            <div class="skel-line" style="width:65%;margin-bottom:6px;"></div>
+            <div class="skel-line" style="width:85%;height:10px;"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="map-status">
+        <span id="status-text">Detecting location…</span>
+        <span id="update-time"></span>
+      </div>
+    </div>
+
+    <!-- Right map -->
+    <div class="map-wrapper" style="position:relative;">
+      <div id="map"></div>
+
+      <!-- Legend -->
+      <div class="map-legend">
+        <div class="map-legend-item">
+          <div class="leg-dot" style="background:#06b6d4;"></div> You are here
+        </div>
+        <div class="map-legend-item">
+          <div class="leg-dot" style="background:#e11d48;"></div> Hospital
+        </div>
+        <div class="map-legend-item">
+          <div class="leg-dot" style="background:#f59e0b;"></div> Clinic / Dispensary
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</main>
+
+<script src="js/chatbot.js"></script>
+<script>
+  let map, userMarker, radiusCircle, hospitalMarkers = [];
+  let userLat, userLon, currentRadius = 5000;
+  let hospitalsData = [];
+  let selectedIndex = -1;
+
+  // ── Custom icons ────────────────────────────────────────────
+  const userIcon = L.divIcon({
+    html: `<div style="width:18px;height:18px;background:#06b6d4;border-radius:50%;border:3px solid white;box-shadow:0 0 8px rgba(6,182,212,0.5);"></div>`,
+    className: '',
+    iconSize: [18,18],
+    iconAnchor: [9,9]
+  });
+
+  function hospitalIcon(type, index) {
+    const color = type === 'hospital' ? '#e11d48' : '#f59e0b';
+    return L.divIcon({
+      html: `<div style="
+        width:32px;height:32px;background:${color};border-radius:50% 50% 50% 0;
+        border:2px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.3);
+        display:flex;align-items:center;justify-content:center;
+        font-size:14px;transform:rotate(-45deg);cursor:pointer;
+      "><span style="transform:rotate(45deg);">${type === 'hospital' ? '🏥' : '💊'}</span></div>`,
+      className: '',
+      iconSize: [32,32],
+      iconAnchor: [16,32],
+      popupAnchor: [0,-32]
+    });
+  }
+
+  // ── Init map ────────────────────────────────────────────────
+  function initMap(lat, lon) {
+    if (map) { map.remove(); hospitalMarkers = []; }
+
+    map = L.map('map', {
+      center: [lat, lon],
+      zoom: 13,
+      zoomControl: true,
+    });
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      maxZoom: 19,
+    }).addTo(map);
+
+    // User marker
+    userMarker = L.marker([lat, lon], { icon: userIcon })
+      .addTo(map)
+      .bindPopup('<div class="popup-name">📍 Your Location</div><div class="popup-addr">Current GPS position</div>');
+
+    // Radius circle
+    radiusCircle = L.circle([lat, lon], {
+      radius: currentRadius,
+      color: '#06b6d4',
+      fillColor: '#06b6d4',
+      fillOpacity: 0.04,
+      weight: 1.5,
+      dashArray: '6,4'
+    }).addTo(map);
+  }
+
+  // ── Haversine distance ─────────────────────────────────────
+  function getDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371000;
+    const φ1 = lat1 * Math.PI / 180, φ2 = lat2 * Math.PI / 180;
+    const Δφ = (lat2 - lat1) * Math.PI / 180;
+    const Δλ = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(Δφ/2)**2 + Math.cos(φ1)*Math.cos(φ2)*Math.sin(Δλ/2)**2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  }
+
+  function fmtDist(m) {
+    return m < 1000 ? Math.round(m) + ' m' : (m/1000).toFixed(1) + ' km';
+  }
+
+  // ── Fetch hospitals from Overpass API ───────────────────────
+  async function fetchHospitals(lat, lon, radius) {
+    document.getElementById('status-text').textContent = 'Searching…';
+    const query = `
+      [out:json][timeout:30];
+      (
+        node["amenity"~"hospital|clinic|doctors|pharmacy|dentist|health_centre"](around:${radius},${lat},${lon});
+        way["amenity"~"hospital|clinic|doctors"](around:${radius},${lat},${lon});
+        relation["amenity"~"hospital|clinic|doctors"](around:${radius},${lat},${lon});
+      );
+      out center tags;
+    `.trim();
+
+    const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
+
+    const res = await fetch(url);
+    const data = await res.json();
+
+    // Process results
+    const hospitals = [];
+    const seen = new Set();
+
+    for (const el of data.elements) {
+      const name = el.tags?.name || el.tags?.['name:en'];
+      if (!name || seen.has(name)) continue;
+      seen.add(name);
+
+      const lat2 = el.lat || el.center?.lat;
+      const lon2 = el.lon || el.center?.lon;
+      if (!lat2 || !lon2) continue;
+
+      const dist = getDistance(lat, lon, lat2, lon2);
+      if (dist > radius) continue;
+
+      hospitals.push({
+        id: el.id,
+        name,
+        lat: lat2,
+        lon: lon2,
+        type: el.tags?.amenity || 'hospital',
+        address: [el.tags?.['addr:housenumber'], el.tags?.['addr:street'], el.tags?.['addr:city']].filter(Boolean).join(', ') || el.tags?.['addr:full'] || 'Address not listed',
+        phone: el.tags?.phone || el.tags?.['contact:phone'] || '',
+        emergency: el.tags?.emergency,
+        dist,
+        website: el.tags?.website || '',
+        beds: el.tags?.beds || '',
+      });
+    }
+
+    hospitals.sort((a, b) => a.dist - b.dist);
+    return hospitals;
+  }
+
+  // ── Render hospital list ────────────────────────────────────
+  function renderList(hospitals) {
+    const list = document.getElementById('hospital-list');
+    document.getElementById('result-count').textContent = hospitals.length;
+
+    if (!hospitals.length) {
+      list.innerHTML = `<div class="geo-error">
+        <div class="geo-error-icon">🏥</div>
+        <h3>No hospitals found</h3>
+        <p>Try increasing the search radius or search a different area.</p>
+      </div>`;
+      return;
+    }
+
+    list.innerHTML = hospitals.map((h, i) => {
+      const typeLabel = { hospital:'Hospital', clinic:'Clinic', doctors:'Medical Centre', pharmacy:'Pharmacy', dentist:'Dental Clinic', health_centre:'Health Centre' }[h.type] || h.type;
+      const emergBadge = h.emergency === 'yes' ? '<span style="font-size:9px;background:#fff1f2;color:#e11d48;padding:1px 5px;border-radius:100px;font-weight:700;">24h ER</span>' : '';
+      const bedBadge = h.beds ? `<span style="font-size:9px;background:#f0fdf4;color:#16a34a;padding:1px 5px;border-radius:100px;font-weight:700;">${h.beds} beds</span>` : '';
+      return `
+        <div class="hospital-card" id="hcard-${i}" onclick="selectHospital(${i})">
+          <div class="hosp-name">${h.name}</div>
+          <div style="position:absolute;top:13px;right:16px;">
+            <span class="hosp-dist">${fmtDist(h.dist)}</span>
+          </div>
+          <div class="hosp-address">${h.address}</div>
+          <div class="hosp-meta">
+            <span class="hosp-type">${typeLabel}</span>
+            ${emergBadge}
+            ${bedBadge}
+          </div>
+          <div class="hosp-actions">
+            <button class="hosp-btn dir" onclick="event.stopPropagation(); openDirections(${h.lat},${h.lon},'${encodeURIComponent(h.name)}')">
+              🧭 Directions
+            </button>
+            ${h.phone ? `<button class="hosp-btn call" onclick="event.stopPropagation(); window.open('tel:${h.phone}')">📞 Call</button>` : ''}
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  // ── Place markers on map ─────────────────────────────────────
+  function placeMarkers(hospitals) {
+    hospitalMarkers.forEach(m => map.removeLayer(m));
+    hospitalMarkers = [];
+
+    hospitals.forEach((h, i) => {
+      const marker = L.marker([h.lat, h.lon], { icon: hospitalIcon(h.type, i) })
+        .addTo(map)
+        .bindPopup(`
+          <div class="popup-name">${h.name}</div>
+          <div class="popup-dist">📍 ${fmtDist(h.dist)} away</div>
+          <div class="popup-addr">${h.address}</div>
+          ${h.phone ? `<div style="font-size:11px;color:#475569;margin-bottom:8px;">📞 ${h.phone}</div>` : ''}
+          <a class="popup-btn" href="https://www.google.com/maps/dir/?api=1&destination=${h.lat},${h.lon}" target="_blank">🧭 Directions</a>
+          ${h.phone ? `<a class="popup-btn" href="tel:${h.phone}" style="background:#10b981;">📞 Call</a>` : ''}
+        `);
+
+      marker.on('click', () => selectHospital(i, false));
+      hospitalMarkers.push(marker);
+    });
+  }
+
+  function selectHospital(index, panMap = true) {
+    // Deselect old
+    if (selectedIndex >= 0) {
+      document.getElementById(`hcard-${selectedIndex}`)?.classList.remove('selected');
+    }
+    selectedIndex = index;
+
+    const card = document.getElementById(`hcard-${index}`);
+    card?.classList.add('selected');
+    card?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+    const h = hospitalsData[index];
+    if (h && panMap) {
+      map.setView([h.lat, h.lon], 15, { animate: true });
+      hospitalMarkers[index]?.openPopup();
+    }
+  }
+
+  function openDirections(lat, lon, name) {
+    window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}&destination_place_id=${name}`, '_blank');
+  }
+
+  // ── Main search flow ────────────────────────────────────────
+  async function searchNearby(lat, lon) {
+    userLat = lat;
+    userLon = lon;
+    document.getElementById('location-status').textContent = `Searching within ${(currentRadius/1000).toFixed(1)} km…`;
+    document.getElementById('hosp-count').textContent = 'Searching…';
+
+    try {
+      hospitalsData = await fetchHospitals(lat, lon, currentRadius);
+      renderList(hospitalsData);
+      placeMarkers(hospitalsData);
+
+      document.getElementById('hosp-count').textContent = `${hospitalsData.length} hospitals found`;
+      document.getElementById('location-status').textContent =
+        `${hospitalsData.length} healthcare facilities within ${(currentRadius/1000).toFixed(1)} km`;
+      document.getElementById('status-text').textContent =
+        `Found ${hospitalsData.length} facilities`;
+      document.getElementById('update-time').textContent =
+        'Updated ' + new Date().toLocaleTimeString('en-IN', {hour:'2-digit', minute:'2-digit'});
+
+    } catch (e) {
+      document.getElementById('hospital-list').innerHTML = `<div class="geo-error">
+        <div class="geo-error-icon">⚡</div>
+        <h3>Could not fetch data</h3>
+        <p>The Overpass API might be slow. Please try again in a moment.</p>
+        <button class="btn btn-outline btn-sm" onclick="refresh()" style="margin-top:12px;">Try again</button>
+      </div>`;
+      document.getElementById('hosp-count').textContent = 'Error';
+      document.getElementById('status-text').textContent = 'Fetch error — try again';
+      console.error('Overpass API error:', e);
+    }
+  }
+
+  // ── Geolocation ─────────────────────────────────────────────
+  function getLocation() {
+    if (!navigator.geolocation) {
+      useDefaultLocation();
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        const { latitude, longitude } = pos.coords;
+        initMap(latitude, longitude);
+        document.getElementById('location-status').textContent = 'Location found — searching…';
+        searchNearby(latitude, longitude);
+      },
+      err => {
+        console.warn('Geolocation denied:', err);
+        useDefaultLocation();
+      },
+      { timeout: 8000, enableHighAccuracy: true }
+    );
+  }
+
+  function useDefaultLocation() {
+    // Default: AIIMS Delhi
+    const lat = 28.5665, lon = 77.2100;
+    initMap(lat, lon);
+    document.getElementById('location-status').textContent = 'Using default location (AIIMS Delhi) — allow location access for accuracy';
+    searchNearby(lat, lon);
+  }
+
+  // ── Search by city ──────────────────────────────────────────
+  async function searchCity() {
+    const city = document.getElementById('city-input').value.trim();
+    if (!city) return;
+
+    document.getElementById('status-text').textContent = `Looking up "${city}"…`;
+    document.getElementById('hosp-count').textContent = 'Searching…';
+
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city + ', India')}&format=json&limit=1`);
+      const data = await res.json();
+      if (!data.length) {
+        alert(`Could not find "${city}". Try a more specific location.`);
+        return;
+      }
+      const lat = parseFloat(data[0].lat);
+      const lon = parseFloat(data[0].lon);
+
+      if (map) {
+        map.setView([lat, lon], 13, { animate: true });
+        if (userMarker) userMarker.setLatLng([lat, lon]);
+        if (radiusCircle) radiusCircle.setLatLng([lat, lon]);
+      } else {
+        initMap(lat, lon);
+      }
+
+      searchNearby(lat, lon);
+    } catch {
+      alert('Could not search. Check your internet connection.');
+    }
+  }
+
+  // ── Radius update ───────────────────────────────────────────
+  function updateRadius(val) {
+    currentRadius = parseInt(val);
+    document.getElementById('radius-label').textContent =
+      currentRadius >= 1000 ? (currentRadius/1000).toFixed(1) + ' km' : currentRadius + ' m';
+
+    if (radiusCircle) radiusCircle.setRadius(currentRadius);
+
+    // Debounce the search
+    clearTimeout(window._radiusTimer);
+    window._radiusTimer = setTimeout(() => {
+      if (userLat && userLon) searchNearby(userLat, userLon);
+    }, 600);
+  }
+
+  function centerOnMe() {
+    if (userLat && userLon && map) {
+      map.setView([userLat, userLon], 14, { animate: true });
+    } else {
+      getLocation();
+    }
+  }
+
+  function refresh() {
+    if (userLat && userLon) searchNearby(userLat, userLon);
+    else getLocation();
+  }
+
+  // ── Start ───────────────────────────────────────────────────
+  getLocation();
+</script>
+</body>
+</html>

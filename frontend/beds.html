@@ -1,0 +1,111 @@
+<a href="nearby.html"><span class="nav-icon">📍</span> Nearby</a>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HEA — Bed Map</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<script src="js/chatbot.js"></script>
+<body>
+
+<header class="header">
+  <a href="dashboard.html" class="header-brand" style="text-decoration:none;">
+    <div class="header-logo-mark">H</div>
+    <div class="header-brand-text">
+      <div class="header-brand-name">HEA</div>
+      <div class="header-brand-sub">Hospital Emergency Allocation</div>
+    </div>
+  </a>
+  <nav class="header-nav">
+    <a href="dashboard.html"><span class="nav-icon">⊞</span> Dashboard</a>
+    <a href="beds.html" class="active"><span class="nav-icon">🛏</span> Beds</a>
+    <a href="forecast.html"><span class="nav-icon">📈</span> Forecast</a>
+    <a href="reports.html"><span class="nav-icon">📋</span> Reports</a>
+  </nav>
+  <div class="header-right">
+    <div class="header-status" id="api-pill">
+      <div class="spinner" style="width:8px;height:8px;border-width:1.5px;border-top-color:#67e8f9;"></div>
+      <span>Connecting…</span>
+    </div>
+  </div>
+</header>
+
+<main class="main">
+
+  <!-- Page header -->
+  <div class="page-header anim-fade-up">
+    <div class="page-title-group">
+      <div class="page-title">Bed Map</div>
+      <div class="page-subtitle" id="bed-summary-line">Loading bed status…</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <button class="btn btn-outline btn-sm" onclick="loadBeds()">↻ Refresh</button>
+    </div>
+  </div>
+
+  <!-- Ward filter tabs -->
+  <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;" class="ward-tabs anim-fade-up delay-1" id="ward-tabs">
+    <button class="ward-tab active" onclick="filterWard(null, this)">All Wards</button>
+  </div>
+
+  <!-- Legend -->
+  <div class="bed-legend anim-fade-up delay-2">
+    <div class="bed-legend-item">
+      <div class="bed-legend-dot available"></div> Available
+    </div>
+    <div class="bed-legend-item">
+      <div class="bed-legend-dot occupied"></div> Occupied
+    </div>
+    <div class="bed-legend-item">
+      <div class="bed-legend-dot maintenance"></div> Maintenance
+    </div>
+    <div style="margin-left:auto;font-size:11px;color:#94a3b8;">Click any bed to change status</div>
+  </div>
+
+  <!-- Beds container -->
+  <div id="beds-container">
+    <div class="loading"><div class="spinner"></div> Loading bed map…</div>
+  </div>
+
+</main>
+
+<!-- Bed Status Modal -->
+<div class="modal-overlay" id="bed-modal">
+  <div class="modal-box" style="max-width:360px;">
+    <div class="modal-title" id="bed-modal-title">Bed</div>
+
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;padding:12px 14px;background:#f8fafc;border-radius:10px;border:1px solid #e2e8f0;">
+      <span style="font-size:24px;" id="bed-modal-icon">🛏</span>
+      <div>
+        <div style="font-size:12px;color:#94a3b8;font-weight:500;text-transform:uppercase;letter-spacing:0.4px;">Current Status</div>
+        <div id="bed-current-status" class="badge" style="margin-top:3px;"></div>
+      </div>
+      <div id="bed-patient-info" style="margin-left:auto;font-size:11px;color:#64748b;text-align:right;"></div>
+    </div>
+
+    <div style="font-size:12px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">Change Status To</div>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <button id="set-available"   class="btn btn-success btn-sm" style="justify-content:flex-start;gap:10px;">
+        <span>✓</span> Mark as Available
+      </button>
+      <button id="set-occupied"    class="btn btn-danger btn-sm" style="justify-content:flex-start;gap:10px;">
+        <span>●</span> Mark as Occupied
+      </button>
+      <button id="set-maintenance" class="btn btn-outline btn-sm" style="justify-content:flex-start;gap:10px;">
+        <span>⚙</span> Mark Under Maintenance
+      </button>
+    </div>
+
+    <div class="modal-actions" style="margin-top:20px;">
+      <button class="btn btn-ghost btn-sm" onclick="closeBedModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<script src="js/charts.js"></script>
+<script src="js/beds.js"></script>
+</body>
+</html>

@@ -1,0 +1,286 @@
+<a href="nearby.html"><span class="nav-icon">📍</span> Nearby</a>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HEA — Reports</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<script src="js/chatbot.js"></script>
+<body>
+
+<header class="header">
+  <a href="dashboard.html" class="header-brand" style="text-decoration:none;">
+    <div class="header-logo-mark">H</div>
+    <div class="header-brand-text">
+      <div class="header-brand-name">HEA</div>
+      <div class="header-brand-sub">Hospital Emergency Allocation</div>
+    </div>
+  </a>
+  <nav class="header-nav">
+    <a href="dashboard.html"><span class="nav-icon">⊞</span> Dashboard</a>
+    <a href="beds.html"><span class="nav-icon">🛏</span> Beds</a>
+    <a href="forecast.html"><span class="nav-icon">📈</span> Forecast</a>
+    <a href="reports.html" class="active"><span class="nav-icon">📋</span> Reports</a>
+  </nav>
+  <div class="header-right">
+    <div class="header-status" id="api-pill">
+      <div class="spinner" style="width:8px;height:8px;border-width:1.5px;border-top-color:#67e8f9;"></div>
+      <span>Connecting…</span>
+    </div>
+  </div>
+</header>
+
+<main class="main">
+
+  <div class="page-header anim-fade-up">
+    <div class="page-title-group">
+      <div class="page-title">Reports &amp; Audit Log</div>
+      <div class="page-subtitle" id="report-updated">Loading…</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn btn-outline btn-sm" onclick="loadAudit()">↻ Refresh</button>
+      <button class="btn btn-primary btn-sm" id="pdf-btn" onclick="downloadPDF()">
+        ⬇ Download PDF Report
+      </button>
+    </div>
+  </div>
+
+  <!-- Quick stats -->
+  <div class="stats-grid anim-fade-up delay-1" id="report-stats">
+    <div class="stat-card"><div class="loading"><div class="spinner"></div></div></div>
+    <div class="stat-card"><div class="loading"><div class="spinner"></div></div></div>
+    <div class="stat-card"><div class="loading"><div class="spinner"></div></div></div>
+    <div class="stat-card"><div class="loading"><div class="spinner"></div></div></div>
+  </div>
+
+  <!-- Action summary -->
+  <div class="card anim-fade-up delay-2" style="margin-bottom:20px;">
+    <div class="card-header">
+      <div class="card-title">Activity Summary (Today)</div>
+    </div>
+    <div id="activity-summary" style="display:flex;gap:16px;flex-wrap:wrap;">
+      <div class="loading"><div class="spinner"></div></div>
+    </div>
+  </div>
+
+  <!-- Audit log -->
+  <div class="card anim-fade-up delay-3">
+    <div class="card-header">
+      <div class="card-title">Full Audit Log <span style="font-size:11px;color:#94a3b8;font-weight:400;text-transform:none;">(last 100 actions)</span></div>
+      <input type="text" id="audit-search" placeholder="Filter by action or details…"
+             style="padding:6px 10px;border:1px solid #e2e8f0;border-radius:7px;font-size:12px;width:220px;font-family:inherit;outline:none;"
+             oninput="filterAudit(this.value)">
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Timestamp</th>
+            <th>Action</th>
+            <th>Details</th>
+            <th>Performed By</th>
+          </tr>
+        </thead>
+        <tbody id="audit-tbody">
+          <tr><td colspan="4"><div class="loading"><div class="spinner"></div></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div id="audit-count" style="font-size:11px;color:#94a3b8;padding:10px 0 0;text-align:right;"></div>
+  </div>
+
+</main>
+
+<div class="toast" id="toast"></div>
+<script src="js/charts.js"></script>
+<script>
+  const API = 'http://localhost:5000/api';
+  let allAuditRows = [];
+
+  const ACTION_META = {
+    PATIENT_ADMIT:      { label:'Patient Admitted',  icon:'🟢', color:'#065f46', bg:'#d1fae5' },
+    PATIENT_DISCHARGE:  { label:'Patient Discharged', icon:'🔵', color:'#1e40af', bg:'#dbeafe' },
+    BED_ALLOCATE:       { label:'Bed Allocated',     icon:'🟣', color:'#5b21b6', bg:'#ede9fe' },
+    BED_RELEASE:        { label:'Bed Released',      icon:'⚪', color:'#475569', bg:'#f1f5f9' },
+    BED_STATUS_CHANGE:  { label:'Bed Status Changed',icon:'🟡', color:'#92400e', bg:'#fef3c7' },
+    RESOURCE_UPDATE:    { label:'Resource Updated',  icon:'🟠', color:'#9a3412', bg:'#ffedd5' },
+  };
+
+  async function checkApiHealth() {
+    const pill = document.getElementById('api-pill');
+    try {
+      const res = await fetch(`${API}/health`, { signal: AbortSignal.timeout(3000) });
+      const d = await res.json();
+      if (d.status === 'ok') {
+        pill.innerHTML = '<div class="live-dot"></div><span>API Live</span>';
+        pill.style.color = '#34d399';
+      }
+    } catch {
+      pill.innerHTML = '<span style="color:#fb7185;">✕ Offline</span>';
+      pill.style.color = '#fb7185';
+    }
+  }
+
+  async function loadAudit() {
+    try {
+      const [dashboard, audit] = await Promise.all([
+        fetch(`${API}/dashboard`).then(r => r.json()),
+        fetch(`${API}/reports/audit`).then(r => r.json()),
+      ]);
+
+      allAuditRows = audit;
+      checkApiHealth();
+
+      document.getElementById('report-updated').textContent =
+        'Generated: ' + new Date().toLocaleString('en-IN', {
+          day:'2-digit', month:'short', year:'numeric',
+          hour:'2-digit', minute:'2-digit'
+        });
+
+      // Stats
+      const bs = dashboard.bed_summary || [];
+      const ps = dashboard.patient_stats || {};
+      const totalBeds = bs.reduce((a, w) => a + (w.total || 0), 0);
+      const occupied  = bs.reduce((a, w) => a + (w.occupied || 0), 0);
+      const available = bs.reduce((a, w) => a + (w.available || 0), 0);
+      const occ = dashboard.occupancy_rate || 0;
+      const occClass = occ >= 90 ? 'red' : occ >= 75 ? 'amber' : 'green';
+
+      document.getElementById('report-stats').innerHTML = `
+        <div class="stat-card anim-fade-up delay-1">
+          <div class="stat-card-inner">
+            <div><div class="stat-label">Total Beds</div><div class="stat-value">${totalBeds}</div></div>
+            <div class="stat-icon navy">🛏</div>
+          </div>
+        </div>
+        <div class="stat-card ${occClass} anim-fade-up delay-2">
+          <div class="stat-card-inner">
+            <div><div class="stat-label">Occupancy</div><div class="stat-value">${occ}%</div><div class="stat-sub">${occupied} occupied · ${available} available</div></div>
+            <div class="stat-icon ${occClass}">📊</div>
+          </div>
+        </div>
+        <div class="stat-card anim-fade-up delay-3">
+          <div class="stat-card-inner">
+            <div><div class="stat-label">Active Patients</div><div class="stat-value">${ps.total_active || 0}</div></div>
+            <div class="stat-icon red">🏥</div>
+          </div>
+        </div>
+        <div class="stat-card anim-fade-up delay-4">
+          <div class="stat-card-inner">
+            <div><div class="stat-label">Admitted Today</div><div class="stat-value">${ps.admitted_today || 0}</div></div>
+            <div class="stat-icon amber">📋</div>
+          </div>
+        </div>
+      `;
+
+      // Activity summary chips
+      const today = new Date().toDateString();
+      const todayRows = audit.filter(r => new Date(r.timestamp).toDateString() === today);
+      const actionCounts = {};
+      todayRows.forEach(r => { actionCounts[r.action] = (actionCounts[r.action] || 0) + 1; });
+
+      const summaryEl = document.getElementById('activity-summary');
+      if (!Object.keys(actionCounts).length) {
+        summaryEl.innerHTML = '<span style="font-size:13px;color:#94a3b8;">No activity recorded today.</span>';
+      } else {
+        summaryEl.innerHTML = Object.entries(actionCounts).map(([action, count]) => {
+          const m = ACTION_META[action] || { label: action, icon: '●', color: '#475569', bg: '#f1f5f9' };
+          return `
+            <div style="display:flex;align-items:center;gap:8px;padding:8px 14px;background:${m.bg};border-radius:8px;font-size:13px;font-weight:600;color:${m.color};">
+              <span>${m.icon}</span>
+              <span>${count}× ${m.label}</span>
+            </div>
+          `;
+        }).join('');
+      }
+
+      renderAuditTable(audit);
+    } catch (e) {
+      document.getElementById('audit-tbody').innerHTML = `
+        <tr><td colspan="4">
+          <div class="empty-state">
+            <div class="empty-state-icon">📡</div>
+            <p>Cannot reach API. Is <code>python app.py</code> running?</p>
+          </div>
+        </td></tr>`;
+    }
+  }
+
+  function renderAuditTable(rows) {
+    const countEl = document.getElementById('audit-count');
+    countEl.textContent = `${rows.length} entries`;
+
+    if (!rows.length) {
+      document.getElementById('audit-tbody').innerHTML =
+        '<tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:28px;">No activity logged yet.</td></tr>';
+      return;
+    }
+
+    document.getElementById('audit-tbody').innerHTML = rows.map(row => {
+      const meta = ACTION_META[row.action] || { label: row.action, icon: '●', color: '#475569', bg: '#f1f5f9' };
+      const ts = formatTimestamp(row.timestamp);
+      const isToday = new Date(row.timestamp).toDateString() === new Date().toDateString();
+      return `
+        <tr>
+          <td style="white-space:nowrap;font-size:11px;font-family:'JetBrains Mono',monospace;color:#94a3b8;">
+            ${ts} ${isToday ? '<span style="font-size:9px;background:#d1fae5;color:#065f46;padding:1px 5px;border-radius:100px;font-weight:700;margin-left:4px;">TODAY</span>' : ''}
+          </td>
+          <td>
+            <span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;padding:3px 8px;border-radius:100px;background:${meta.bg};color:${meta.color};">
+              ${meta.icon} ${meta.label}
+            </span>
+          </td>
+          <td style="font-size:12px;color:#334155;max-width:300px;">${row.details || '—'}</td>
+          <td style="font-size:11px;color:#94a3b8;">${row.performed_by || 'system'}</td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  function filterAudit(query) {
+    if (!query.trim()) { renderAuditTable(allAuditRows); return; }
+    const q = query.toLowerCase();
+    const filtered = allAuditRows.filter(r =>
+      (r.action || '').toLowerCase().includes(q) ||
+      (r.details || '').toLowerCase().includes(q) ||
+      (r.performed_by || '').toLowerCase().includes(q)
+    );
+    renderAuditTable(filtered);
+  }
+
+  async function downloadPDF() {
+    const btn = document.getElementById('pdf-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<div class="spinner" style="width:12px;height:12px;border-width:1.5px;border-top-color:white;display:inline-block;margin-right:6px;"></div> Generating…';
+    showToast('⏳ Generating PDF report…', 'info');
+
+    try {
+      const res = await fetch(`${API}/reports/pdf`);
+      if (!res.ok) {
+        const j = await res.json();
+        throw new Error(j.error || 'Server error');
+      }
+      const blob = await res.blob();
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href = url;
+      a.download = `HEA_Report_${new Date().toISOString().slice(0,10)}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast('✓ PDF downloaded successfully!', 'success');
+    } catch (e) {
+      showToast('⚠ PDF error: ' + e.message + '. Install reportlab: pip install reportlab', 'error');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '⬇ Download PDF Report';
+    }
+  }
+
+  loadAudit();
+</script>
+</body>
+</html>
